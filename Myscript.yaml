@@ -1,21 +1,44 @@
----
-- name: Automating everything about apache2 sites
-  hosts: localhost
+- name: Automatiser la configuration d'Apache2
+  hosts: all
   become: yes
-  gather_facts: false
-  vars_prompt:
-    - name: "file_path"
-      prompt: "Path for the domains name file :"
-      private: false
   tasks:
-    - name: Check if apache2 is installed
+    - name: Installer Apache2
       apt:
         name: apache2
         state: present
-    - name: Send a domains_name file to the givent host
+
+    - name: Copier le fichier domains
       copy:
-        src: { { file_path } }
-        dest: /tmp/domains_name.txt
-    - name: Sead the donamains_name file
-      command: cat /tmp/domains_names.txt
+        src: domains
+        dest: /tmp/domains
+
+    - name: Lire le fichier domains
+      shell: cat /tmp/domains
       register: names_output
+
+    - name: Creer le fichier de  configuration
+      template:
+        src: site.conf
+        dest: "/etc/apache2/sites-available/{{ item }}.conf"
+      loop: "{{ names_output.stdout_lines }}"
+
+    - name: Creation du directories
+      file:
+        path: "/var/www/{{ item }}"
+        state: directory
+      loop: "{{ names_output.stdout_lines }}"
+
+    - name: Creer la page HTML
+      template:
+        src: site.html
+        dest: "/var/www/{{ item }}/index.html"
+      loop: "{{ names_output.stdout_lines }}"
+
+    - name: Activer les configurations
+      command: a2ensite {{ item }}.conf
+      loop: "{{ names_output.stdout_lines }}"
+
+    - name: Redemarrer Apache2
+      service:
+        name: apache2
+        state: restarted
